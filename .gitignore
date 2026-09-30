@@ -8,3 +8,4 @@ build-directory.txt
 canary-path.txt
 .env
 .env.*
+codex-bin/

@@ -18,6 +18,8 @@ if [[ "$mode" == build ]]; then
   julia_bin=${LAB_JULIA_BIN:-$(command -v julia || true)}
   [[ -x "$codex_bin" && -x "$julia_bin" ]] || { echo 'Install standalone Codex CLI and Julia first, or set LAB_CODEX_BIN and LAB_JULIA_BIN.' >&2; exit 1; }
   codex_bin=$(realpath -- "$codex_bin")
+  codex_bin_dir=$(dirname -- "$codex_bin")
+  [[ -x "$codex_bin_dir/codex-code-mode-host" ]] || { echo 'Missing codex-code-mode-host beside Codex. Install the complete standalone Codex release; keep its matching companion binaries together.' >&2; exit 1; }
   python3 - "$codex_bin" <<'PYCODE'
 import sys
 with open(sys.argv[1], 'rb') as f:
@@ -30,7 +32,9 @@ PYCODE
   build_dir=$(mktemp -d)
   trap 'rm -rf -- "$build_dir"' EXIT
   cp "$source_dir/Containerfile" "$build_dir/Containerfile"
-  cp "$codex_bin" "$build_dir/codex"
+  # Preserve the complete release bin directory, including matching tool hosts.
+  # Copy no authentication, configuration, or parent package state.
+  cp -aL "$codex_bin_dir" "$build_dir/codex-bin"
   cp -a "$julia_root" "$build_dir/julia"
   podman build --tag "$image" "$build_dir"
 fi

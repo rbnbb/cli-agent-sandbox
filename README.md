@@ -20,9 +20,9 @@ From this directory, as your ordinary user:
 ./install.sh
 ```
 
-The installer runs diagnostics, copies only the Codex executable and Julia runtime into a temporary build context, builds the image, runs isolation/runtime/network tests, and installs the launcher only if all tests pass. It does not copy host Codex configuration, logins, Julia packages or SSH credentials. The temporary build context is removed on exit. Existing launcher files are replaced after successful testing.
+The installer runs diagnostics, copies the standalone Codex release bin directory (including `codex-code-mode-host`) and Julia runtime into a temporary build context, builds the image, runs isolation/runtime/network tests, and installs the launcher only if all tests pass. It does not copy host Codex configuration, logins, Julia packages or SSH credentials. The temporary build context is removed on exit. Existing launcher files are replaced after successful testing.
 
-The Python base image is pinned by digest. Debian packages come from the configured upstream repositories at build time. Codex and Julia versions come from your local installations; this is portable packaging, not a byte-for-byte reproducible build. An npm wrapper is not a native Codex binary: use `LAB_CODEX_BIN` to select the underlying executable. ELF binaries with missing dynamic dependencies fail the runtime test.
+The Python base image is pinned by digest. Debian packages come from the configured upstream repositories at build time. Codex and Julia versions come from your local installations; this is portable packaging, not a byte-for-byte reproducible build. An npm wrapper is not a native Codex binary: use `LAB_CODEX_BIN` to select the underlying executable. Keep the complete standalone release together: the installer requires `codex-code-mode-host` beside the native Codex binary and copies the release bin directory. ELF binaries with missing dynamic dependencies fail the runtime test.
 
 ```sh
 ./doctor.sh                 # Host prerequisites and user namespace checks
@@ -80,3 +80,7 @@ Internet access uses slirp4netns with host-loopback forwarding disabled. This is
 The dedicated Codex login stored under `.sandbox-home/codex` is accessible to sandbox jobs. Do not publish or sync it through a public repository. Host runtime upgrades do not update the image; rerun the installer to rebuild.
 
 Reference: https://docs.podman.io/en/latest/markdown/podman-run.1.html
+
+## Updating a running sandbox
+
+Rebuilding an image does not modify containers already running from it. Finish work and exit the old sandbox, then start `~/.local/bin/codex-lab` again (use `resume` to select a saved session). Workspace and login state persist. A missing `/usr/local/bin/codex-code-mode-host` indicates an incomplete or older image: rebuild with this installer and recreate the container. CLI `--version` and HTTPS checks alone do not exercise the tool execution host. The startup tests do not verify an authenticated end-to-end browsing request.
