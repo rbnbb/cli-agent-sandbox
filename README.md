@@ -79,12 +79,4 @@ Internet access uses slirp4netns with host-loopback forwarding disabled. This is
 
 The dedicated Codex login stored under `.sandbox-home/codex` is accessible to sandbox jobs. Do not publish or sync it through a public repository. Host runtime upgrades do not update the image; rerun the installer to rebuild.
 
-## Distribution
-
-Publish this setup directory as its own repository, not all of `~/lab`. It contains no credentials, private runtime state or machine-specific usernames. Do not commit runtime copies, images, build contexts or `.sandbox-home`. The included `.gitignore` is a convenience, not a substitute for reviewing staged files. Add your chosen license before distributing it as an open-source project.
-
-An ordinary Git repository is sufficient. Chezmoi can optionally manage the host launcher or your environment overrides; it is not required. Keep the trusted installed launcher outside the workspace.
-
-Tests use disposable directories with a real external canary and clean up afterward. They check host-file/symlink isolation, read-only image, UID mapping, capabilities, no-new-privileges, seccomp, environment isolation, Julia/Python writes, Codex startup, offline networking and GitHub HTTPS. Authentication and mobile remote control are not tested.
-
 Reference: https://docs.podman.io/en/latest/markdown/podman-run.1.html
