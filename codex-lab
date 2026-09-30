@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+# Install a trusted copy OUTSIDE the mounted workspace before regular use.
+workspace=${LAB_WORKSPACE:-"$HOME/lab"}
+image=${LAB_IMAGE:-localhost/codex-lab:1}
+[[ -d "$workspace" ]] || { echo "Workspace does not exist: $workspace" >&2; exit 1; }
+workspace=$(realpath -- "$workspace")
+[[ "$workspace" != / && "$workspace" != "$(realpath -- "$HOME")" ]] || { echo 'Refusing to expose the entire home or root directory.' >&2; exit 1; }
+[[ "$workspace" != *:* && "$workspace" != *,* ]] || { echo 'Workspace paths containing colon or comma are unsupported.' >&2; exit 1; }
+command -v podman >/dev/null || { echo 'Install rootless Podman first; see README.md.' >&2; exit 1; }
+network=slirp4netns:allow_host_loopback=false
+if [[ ${1:-} == --offline ]]; then
+  network=none
+  shift
+fi
+opts=(--rm --pull=never --userns=keep-id --cap-drop=all
+  --security-opt=no-new-privileges --read-only
+  --pid=private --ipc=private --uts=private
+  --network="$network" --no-hosts
+  --pids-limit=1024
+  --tmpfs /tmp:rw,nosuid,nodev,size=2g
+  --volume "$workspace:/workspace:rw,rprivate"
+  --workdir /workspace
+  --env HOME=/tmp/lab-home
+  --env CODEX_HOME=/workspace/.sandbox-home/codex
+  --env JULIA_DEPOT_PATH=/workspace/.sandbox-home/julia
+  --env PYTHONUSERBASE=/workspace/.sandbox-home/python
+  --env TERM="${TERM:-xterm-256color}")
+if [[ "$network" != none ]]; then opts+=(--dns="${LAB_DNS:-1.1.1.1}" --dns-search=.); fi
+if [[ -t 0 && -t 1 ]]; then opts+=(-it); else opts+=(-i); fi
+# No host environment forwarding, credentials, agent sockets, or engine socket.
+entry='set -e; umask 077; mkdir -p /tmp/lab-home/.juliaup/bin /workspace/.sandbox-home/codex; ln -s /opt/julia/bin/julia /tmp/lab-home/.juliaup/bin/julia; exec "$@"'
+case ${1:-} in
+  --shell) shift; command=(/bin/bash "$@");;
+  --run) shift; if (( $# == 0 )); then echo '--run needs a command' >&2; exit 2; fi; command=("$@");;
+  --login) shift; command=(codex login --device-auth "$@");;
+  *) command=(codex --no-daemon --dangerously-bypass-approvals-and-sandbox -C /workspace "$@");;
+esac
+exec podman run "${opts[@]}" "$image" /bin/bash -c "$entry" sandbox-init "${command[@]}"
