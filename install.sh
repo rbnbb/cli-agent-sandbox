@@ -20,6 +20,8 @@ if [[ "$mode" == build ]]; then
   codex_bin=$(realpath -- "$codex_bin")
   codex_bin_dir=$(dirname -- "$codex_bin")
   [[ -x "$codex_bin_dir/codex-code-mode-host" ]] || { echo 'Missing codex-code-mode-host beside Codex. Install the complete standalone Codex release; keep its matching companion binaries together.' >&2; exit 1; }
+  codex_package=$(dirname -- "$codex_bin_dir")
+  [[ -f "$codex_package/codex-package.json" && -d "$codex_package/codex-resources" && -d "$codex_package/codex-path" ]] || { echo 'Incomplete Codex standalone package: manifest, resources, and path directory are required.' >&2; exit 1; }
   python3 - "$codex_bin" <<'PYCODE'
 import sys
 with open(sys.argv[1], 'rb') as f:
@@ -32,9 +34,12 @@ PYCODE
   build_dir=$(mktemp -d)
   trap 'rm -rf -- "$build_dir"' EXIT
   cp "$source_dir/Containerfile" "$build_dir/Containerfile"
-  # Preserve the complete release bin directory, including matching tool hosts.
-  # Copy no authentication, configuration, or parent package state.
-  cp -aL "$codex_bin_dir" "$build_dir/codex-bin"
+  # Preserve package discovery and daemon support; never copy CODEX_HOME.
+  mkdir "$build_dir/codex-package"
+  for item in bin codex-package.json codex-resources codex-path; do
+    cp -aL "$codex_package/$item" "$build_dir/codex-package/$item"
+  done
+  ln -s bin/codex "$build_dir/codex-package/codex"
   cp -a "$julia_root" "$build_dir/julia"
   podman build --tag "$image" "$build_dir"
 fi

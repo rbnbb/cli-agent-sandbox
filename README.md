@@ -20,9 +20,9 @@ From this directory, as your ordinary user:
 ./install.sh
 ```
 
-The installer runs diagnostics, copies the standalone Codex release bin directory (including `codex-code-mode-host`) and Julia runtime into a temporary build context, builds the image, runs isolation/runtime/network tests, and installs the launcher only if all tests pass. It does not copy host Codex configuration, logins, Julia packages or SSH credentials. The temporary build context is removed on exit. Existing launcher files are replaced after successful testing.
+The installer runs diagnostics, copies the complete standalone Codex release (manifest, bin, resources and path tools) and Julia runtime into a temporary build context, builds the image, runs isolation/runtime/network tests, and installs the launcher only if all tests pass. It does not copy host Codex configuration, logins, Julia packages or SSH credentials. The temporary build context is removed on exit. Existing launcher files are replaced after successful testing.
 
-The Python base image is pinned by digest. Debian packages come from the configured upstream repositories at build time. Codex and Julia versions come from your local installations; this is portable packaging, not a byte-for-byte reproducible build. An npm wrapper is not a native Codex binary: use `LAB_CODEX_BIN` to select the underlying executable. Keep the complete standalone release together: the installer requires `codex-code-mode-host` beside the native Codex binary and copies the release bin directory. ELF binaries with missing dynamic dependencies fail the runtime test.
+The Python base image is pinned by digest. Debian packages come from the configured upstream repositories at build time. Codex and Julia versions come from your local installations; this is portable packaging, not a byte-for-byte reproducible build. An npm wrapper is not a native Codex binary: use `LAB_CODEX_BIN` to select the underlying executable. Keep the complete standalone release together: the installer requires `codex-code-mode-host` beside the native Codex binary and copies its package manifest, bin, resources and path directories. ELF binaries with missing dynamic dependencies fail the runtime test.
 
 ```sh
 ./doctor.sh                 # Host prerequisites and user namespace checks
@@ -42,7 +42,7 @@ tmux new-session -s lab-sandbox '~/.local/bin/codex-lab'
 tmux attach -t lab-sandbox
 ```
 
-Inside an existing tmux session, run the launcher in a new window instead. This provides SSH/terminal access from a phone. ChatGPT mobile-app remote control is not configured by this package. Tmux survives SSH disconnection, not reboot.
+Inside an existing tmux session, run the launcher in a new window instead. This provides SSH/terminal access from a phone. For app remote control, use the dedicated supervised mode below. Tmux survives SSH disconnection, not reboot.
 
 ```sh
 ~/.local/bin/codex-lab --shell
@@ -84,3 +84,25 @@ Reference: https://docs.podman.io/en/latest/markdown/podman-run.1.html
 ## Updating a running sandbox
 
 Rebuilding an image does not modify containers already running from it. Finish work and exit the old sandbox, then start `~/.local/bin/codex-lab` again (use `resume` to select a saved session). Workspace and login state persist. A missing `/usr/local/bin/codex-code-mode-host` indicates an incomplete or older image: rebuild with this installer and recreate the container. CLI `--version` and HTTPS checks alone do not exercise the tool execution host. The startup tests do not verify an authenticated end-to-end browsing request.
+
+## Remote control from the app
+
+After `codex-lab --login`, run this from the host in tmux:
+
+```sh
+codex-lab --remote
+```
+
+This starts `codex remote-control start` as a managed daemon inside a named container and keeps a foreground supervisor alive. The managed daemon exposes the control socket required for pairing. Keep the supervisor running. In another host terminal, if manual pairing is needed:
+
+```sh
+codex-lab --pair
+```
+
+Pairing executes inside the same container; no host Codex daemon or host credentials are exposed. The default container name is `codex-lab-remote`. Set `LAB_REMOTE_CONTAINER` consistently on both commands to use a different name. Only one container can use a given name. Stop the supervisor before relaunching it with a new image. Offline mode cannot provide remote control.
+
+Do not use `codex-lab --run codex remote-control start`: the background daemon cannot keep a short-lived `podman run --rm` container alive after its main process exits. `--remote` deliberately supervises the managed daemon and passes unrestricted inner filesystem permissions; the outer Podman isolation remains enforced. Your mobile client must select this sandboxed host/session rather than an existing unsandboxed connection. Pairing availability and account/workspace policies can still affect access.
+
+The complete standalone package is required for `remote-control start` and managed app-server startup. Copying binaries alone is insufficient. The daemon may install a managed copy of its package under `.sandbox-home/codex/packages`, increasing persistent disk usage. Run one active Codex container per workspace to avoid sharing daemon control state between containers.
+
+The bare `codex remote-control` foreground command does not expose the managed control socket in CLI 0.159.2. It may announce availability while `remote-control pair` fails with a missing socket. Use this package's supervised `--remote` mode. Managed startup and pairing-code generation were verified on the installation host, and connection from the Mac desktop app was confirmed. Android ChatGPT 1.2026.265 still exhibited an authorization/pairing loop; successful code generation does not confirm completion of client pairing.

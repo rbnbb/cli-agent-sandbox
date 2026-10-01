@@ -8,6 +8,11 @@ workspace=$(realpath -- "$workspace")
 [[ "$workspace" != / && "$workspace" != "$(realpath -- "$HOME")" ]] || { echo 'Refusing to expose the entire home or root directory.' >&2; exit 1; }
 [[ "$workspace" != *:* && "$workspace" != *,* ]] || { echo 'Workspace paths containing colon or comma are unsupported.' >&2; exit 1; }
 command -v podman >/dev/null || { echo 'Install rootless Podman first; see README.md.' >&2; exit 1; }
+remote_container=${LAB_REMOTE_CONTAINER:-codex-lab-remote}
+if [[ ${1:-} == --pair ]]; then
+  shift
+  exec podman exec "$remote_container" codex remote-control pair "$@"
+fi
 network=slirp4netns:allow_host_loopback=false
 if [[ ${1:-} == --offline ]]; then
   network=none
@@ -31,6 +36,26 @@ if [[ -t 0 && -t 1 ]]; then opts+=(-it); else opts+=(-i); fi
 # No host environment forwarding, credentials, agent sockets, or engine socket.
 entry='set -e; umask 077; mkdir -p /tmp/lab-home/.juliaup/bin /workspace/.sandbox-home/codex; ln -s /opt/julia/bin/julia /tmp/lab-home/.juliaup/bin/julia; exec "$@"'
 case ${1:-} in
+  --remote)
+    shift
+    [[ "$network" != none ]] || { echo 'Remote control requires network access.' >&2; exit 2; }
+    opts+=(--name "$remote_container" --hostname codex-lab)
+    # Foreground remote-control does not expose the managed control socket.
+    # Start the managed daemon, then keep its container alive and monitor it.
+    remote_entry=$(cat <<'REMOTE'
+set -euo pipefail
+cleanup() { codex remote-control stop >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+codex -c 'sandbox_mode="danger-full-access"' -c 'approval_policy="never"' remote-control start "$@"
+printf 'Remote container is running. In another host terminal: codex-lab --pair\n'
+while sleep 5; do
+  codex app-server daemon version | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(0 if s.get("status") == "running" else "Remote daemon stopped")'
+done
+REMOTE
+)
+    command=(/bin/bash -c "$remote_entry" remote-supervisor "$@");;
   --shell) shift; command=(/bin/bash "$@");;
   --run) shift; if (( $# == 0 )); then echo '--run needs a command' >&2; exit 2; fi; command=("$@");;
   --login) shift; command=(codex login --device-auth "$@");;

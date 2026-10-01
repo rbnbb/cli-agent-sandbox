@@ -9,3 +9,4 @@ canary-path.txt
 .env
 .env.*
 codex-bin/
+codex-package/
